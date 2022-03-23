@@ -36,7 +36,7 @@ var (
 	useDocker         = flag.Bool("use-docker", true, "start database using a docker container")
 	useTimescaleDB    = flag.Bool("use-timescaledb", true, "use TimescaleDB")
 	// TODO (james): Replace hardcoded value
-	timescaleDockerImage  = flag.String("timescale-docker-image", "ghcr.io/timecale/dev_promscale_extension:develop-ts2-pg14", "TimescaleDB docker image to run tests against")
+	timescaleDockerImage  = flag.String("timescale-docker-image", "ghcr.io/timescale/dev_promscale_extension:develop-ts2-pg14", "TimescaleDB docker image to run tests against")
 	useMultinode          = flag.Bool("use-multinode", false, "use TimescaleDB Multinode")
 	useTimescaleDBNightly = flag.Bool("use-timescaledb-nightly", false, "use TimescaleDB nightly images")
 	printLogs             = flag.Bool("print-logs", false, "print TimescaleDB logs")
@@ -323,4 +323,17 @@ func newWriteRequestWithTs(ts []prompb.TimeSeries) *prompb.WriteRequest {
 		wr.Timeseries = ts
 	}
 	return wr
+}
+
+// deep copy the metrics since we mutate them, and don't want to invalidate the tests
+func copyMetrics(metrics []prompb.TimeSeries) []prompb.TimeSeries {
+	out := make([]prompb.TimeSeries, len(metrics))
+	copy(out, metrics)
+	for i := range out {
+		out[i].Labels = make([]prompb.Label, len(metrics[i].Labels))
+		out[i].Samples = make([]prompb.Sample, len(metrics[i].Samples))
+		copy(out[i].Labels, metrics[i].Labels)
+		copy(out[i].Samples, metrics[i].Samples)
+	}
+	return out
 }

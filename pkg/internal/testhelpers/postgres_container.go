@@ -9,8 +9,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
+	"os/exec"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,15 +113,13 @@ func (e TestOptions) GetDockerImageName() string {
 }
 
 func (e TestOptions) TryGetDockerImagePgVersion() (string, error) {
-	r, err := regexp.Compile(`pg(\d+)`)
+	cmd := exec.Command("docker", "run", e.timescaleDockerImage, "bash", "-c", "pg_config --version | cut -d' ' -f 2 | cut -d. -f1")
+	out, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("something went wrong: %w", err)
 	}
-	m := r.FindStringSubmatch(e.timescaleDockerImage)
-	if len(m) < 2 {
-		return "", fmt.Errorf("unable to determine postgres version")
-	}
-	return m[1], nil
+	version := strings.TrimSuffix(string(out), "\n")
+	return version, nil
 }
 
 var (

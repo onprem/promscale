@@ -2,7 +2,7 @@
 // Please see the included NOTICE for copyright information and
 // LICENSE for a copy of the license.
 
-package upgrade_tests
+package end_to_end_tests
 
 import (
 	"bufio"

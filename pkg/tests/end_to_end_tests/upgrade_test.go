@@ -2,12 +2,11 @@
 // Please see the included NOTICE for copyright information and
 // LICENSE for a copy of the license.
 
-package upgrade_tests
+package end_to_end_tests
 
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -39,53 +38,37 @@ import (
 	"github.com/timescale/promscale/pkg/version"
 )
 
-var (
-	testDatabase = flag.String("database", "tmp_db_timescale_upgrade_test", "database to run integration tests on")
-	printLogs    = flag.Bool("print-logs", false, "print TimescaleDB logs")
-	// use "local/dev_promscale_extension:head-ts2-pg13" for local testing
-	dockerImage        = flag.String("image", "ghcr.io/timescale/dev_promscale_extension:develop-ts2-pg14", "docker image for database")
-	baseExtensionState testhelpers.TestOptions
-)
-
 func init() {
 	tput.InitWatcher(0)
 }
 
-func TestMain(m *testing.M) {
-	var code int
-	flag.Parse()
-	baseExtensionState.UseTimescaleDB()
-	// use "local/dev_promscale_extension:head-ts2-pg13" for local testing
-	baseExtensionState.SetTimescaleDockerImage(*dockerImage)
-	if err := os.Setenv("IS_TEST", "true"); err != nil {
-		// E2E tests calls prometheus.MustRegister() more than once in clockcache,
-		// hence, we set this environment variable to have a different behaviour
-		// while assigning registerer in clockcache metrics.
-		panic(err)
-	}
-	_ = log.Init(log.Config{
-		Level: "debug",
-	})
-	code = m.Run()
-	os.Exit(code)
-}
+//func TestMain(m *testing.M) {
+//	var code int
+//	flag.Parse()
+//	extensionState.UseTimescaleDB()
+//	// use "local/dev_promscale_extension:head-ts2-pg13" for local testing
+//	extensionState.SetTimescaleDockerImage(*dockerImage)
+//	if err := os.Setenv("IS_TEST", "true"); err != nil {
+//		// E2E tests calls prometheus.MustRegister() more than once in clockcache,
+//		// hence, we set this environment variable to have a different behaviour
+//		// while assigning registerer in clockcache metrics.
+//		panic(err)
+//	}
+//	_ = log.Init(log.Config{
+//		Level: "debug",
+//	})
+//	code = m.Run()
+//	os.Exit(code)
+//}
 
 /* Prev image is the db image with the old promscale extension. We do NOT test timescaleDB extension upgrades here. */
-func getDBImages(extensionState testhelpers.TestOptions) (prev string, clean string, err error) {
-	// using pg13 until we deal with the lack of "trusted" support in pg12
-	//if !extensionState.UsesPG12() {
-	//	//using the oldest supported version of PG seems sufficient.
-	//	//we don't want to use any features in a newer PG version that isn't available in an older one
-	//	//but migration code that works in an older PG version should generally work in a newer one.
-	//	panic("Only use pg12 for upgrade tests")
-	//}
-	// TODO: Extracting the pg version from the docker image name is a nasty hack. How can we avoid this?
-	dockerImageName := extensionState.GetDockerImageName()
-	pgVersion, err := extensionState.TryGetDockerImagePgVersion()
+func getDBImages(testOptions testhelpers.TestOptions) (prev string, clean string, err error) {
+	dockerImageName := testOptions.GetDockerImageName()
+	pgVersion, err := testOptions.TryGetDockerImagePgVersion()
 	if err != nil {
-		panic("unable to get docker image version")
+		return "", "", err
 	}
-	return "timescaledev/promscale-extension:0.3.2-2.6.0-pg" + pgVersion, dockerImageName, nil
+	return "timescaledev/promscale-extension:0.3.2-2.6.0-pg" + pgVersion, dockerImageName + "-alpine", nil
 }
 
 func writeToFiles(t *testing.T, upgradedDbInfo, pristineDbInfo dbSnapshot) error {
@@ -111,8 +94,8 @@ func writeToFiles(t *testing.T, upgradedDbInfo, pristineDbInfo dbSnapshot) error
 }
 
 func TestUpgradeFromPrev(t *testing.T) {
-	upgradedDbInfo := getUpgradedDbInfo(t, false, false, baseExtensionState)
-	pristineDbInfo := getPristineDbInfo(t, false, baseExtensionState)
+	upgradedDbInfo := getUpgradedDbInfo(t, false, false, testOptions)
+	pristineDbInfo := getPristineDbInfo(t, false, testOptions)
 	err := writeToFiles(t, upgradedDbInfo, pristineDbInfo)
 	if err != nil {
 		t.Fatal(err)
@@ -123,8 +106,8 @@ func TestUpgradeFromPrev(t *testing.T) {
 }
 
 func TestUpgradeFromEarliest(t *testing.T) {
-	upgradedDbInfo := getUpgradedDbInfo(t, false, true, baseExtensionState)
-	pristineDbInfo := getPristineDbInfo(t, false, baseExtensionState)
+	upgradedDbInfo := getUpgradedDbInfo(t, false, true, testOptions)
+	pristineDbInfo := getPristineDbInfo(t, false, testOptions)
 	err := writeToFiles(t, upgradedDbInfo, pristineDbInfo)
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +118,7 @@ func TestUpgradeFromEarliest(t *testing.T) {
 }
 
 func TestUpgradeFromEarliestMultinode(t *testing.T) {
-	extState := baseExtensionState
+	extState := testOptions
 	extState.UseMultinode()
 	upgradedDbInfo := getUpgradedDbInfo(t, false, true, extState)
 	pristineDbInfo := getPristineDbInfo(t, false, extState)
@@ -151,8 +134,8 @@ func TestUpgradeFromEarliestMultinode(t *testing.T) {
 // TestUpgradeFromPrevNoData tests migrations with no ingested data.
 // See issue: https://github.com/timescale/promscale/issues/330
 func TestUpgradeFromEarliestNoData(t *testing.T) {
-	upgradedDbInfo := getUpgradedDbInfo(t, true, true, baseExtensionState)
-	pristineDbInfo := getPristineDbInfo(t, true, baseExtensionState)
+	upgradedDbInfo := getUpgradedDbInfo(t, true, true, testOptions)
+	pristineDbInfo := getPristineDbInfo(t, true, testOptions)
 	err := writeToFiles(t, upgradedDbInfo, pristineDbInfo)
 	if err != nil {
 		t.Fatal(err)
@@ -269,7 +252,7 @@ func getPristineDbInfo(t *testing.T, noData bool, extensionState testhelpers.Tes
 }
 
 // pick a start time in the future so data won't get compressed
-const startTime = 6600000000000 // approx 210 years after the epoch
+const startTimeInFarFuture = 6600000000000 // approx 210 years after the epoch
 var (
 	preUpgradeData1 = []prompb.TimeSeries{
 		{
@@ -278,8 +261,8 @@ var (
 				{Name: "test", Value: "test"},
 			},
 			Samples: []prompb.Sample{
-				{Timestamp: startTime + 1, Value: 0.1},
-				{Timestamp: startTime + 2, Value: 0.2},
+				{Timestamp: startTimeInFarFuture + 1, Value: 0.1},
+				{Timestamp: startTimeInFarFuture + 2, Value: 0.2},
 			},
 		},
 	}
@@ -290,7 +273,7 @@ var (
 				{Name: "foo", Value: "bar"},
 			},
 			Samples: []prompb.Sample{
-				{Timestamp: startTime + 4, Value: 2.2},
+				{Timestamp: startTimeInFarFuture + 4, Value: 2.2},
 			},
 		},
 	}
@@ -302,8 +285,8 @@ var (
 				{Name: "testB", Value: "testB"},
 			},
 			Samples: []prompb.Sample{
-				{Timestamp: startTime + 4, Value: 0.4},
-				{Timestamp: startTime + 5, Value: 0.5},
+				{Timestamp: startTimeInFarFuture + 4, Value: 0.4},
+				{Timestamp: startTimeInFarFuture + 5, Value: 0.5},
 			},
 		},
 	}
@@ -314,7 +297,7 @@ var (
 				{Name: "baz", Value: "quf"},
 			},
 			Samples: []prompb.Sample{
-				{Timestamp: startTime + 66, Value: 6.0},
+				{Timestamp: startTimeInFarFuture + 66, Value: 6.0},
 			},
 		},
 	}
@@ -370,15 +353,6 @@ func withDBStartingAtOldVersionAndUpgrading(
 	dataDir, err := testhelpers.TempDir("update_test_data")
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	ver, err := extensionState.TryGetDockerImagePgVersion()
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		if ver == "14" {
-			t.Skip("cannot test upgrade on pg14")
-		}
 	}
 
 	prevDBImage, cleanImage, err := getDBImages(extensionState)
@@ -575,19 +549,6 @@ func doIngest(t *testing.T, ingstr *ingestor.DBIngestor, data ...[]prompb.TimeSe
 		}
 		_ = ingstr.CompleteMetricCreation(context.Background())
 	}
-}
-
-// deep copy the metrics since we mutate them, and don't want to invalidate the tests
-func copyMetrics(metrics []prompb.TimeSeries) []prompb.TimeSeries {
-	out := make([]prompb.TimeSeries, len(metrics))
-	copy(out, metrics)
-	for i := range out {
-		out[i].Labels = make([]prompb.Label, len(metrics[i].Labels))
-		out[i].Samples = make([]prompb.Sample, len(metrics[i].Samples))
-		copy(out[i].Labels, metrics[i].Labels)
-		copy(out[i].Samples, metrics[i].Samples)
-	}
-	return out
 }
 
 func TestExtensionUpgrade(t *testing.T) {
