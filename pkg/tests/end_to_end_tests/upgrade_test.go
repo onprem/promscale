@@ -42,25 +42,6 @@ func init() {
 	tput.InitWatcher(0)
 }
 
-//func TestMain(m *testing.M) {
-//	var code int
-//	flag.Parse()
-//	extensionState.UseTimescaleDB()
-//	// use "local/dev_promscale_extension:head-ts2-pg13" for local testing
-//	extensionState.SetTimescaleDockerImage(*dockerImage)
-//	if err := os.Setenv("IS_TEST", "true"); err != nil {
-//		// E2E tests calls prometheus.MustRegister() more than once in clockcache,
-//		// hence, we set this environment variable to have a different behaviour
-//		// while assigning registerer in clockcache metrics.
-//		panic(err)
-//	}
-//	_ = log.Init(log.Config{
-//		Level: "debug",
-//	})
-//	code = m.Run()
-//	os.Exit(code)
-//}
-
 /* Prev image is the db image with the old promscale extension. We do NOT test timescaleDB extension upgrades here. */
 func getDBImages(testOptions testhelpers.TestOptions) (prev string, clean string, err error) {
 	dockerImageName := testOptions.GetDockerImageName()
@@ -68,7 +49,17 @@ func getDBImages(testOptions testhelpers.TestOptions) (prev string, clean string
 	if err != nil {
 		return "", "", err
 	}
-	return "timescaledev/promscale-extension:0.3.2-2.6.0-pg" + pgVersion, dockerImageName + "-alpine", nil
+	oldestCompatibleVersionTag := map[string]string{
+		// TODO: Replace empty value for pg12 when we've resolved https://github.com/timescale/promscale_extension/issues/109
+		"12": "",
+		"13": "pg13-ts2.1-latest",
+		"14": "pg14.1-ts2.5.1-latest",
+	}
+	tag, ok := oldestCompatibleVersionTag[pgVersion]
+	if !ok || tag == "" {
+		return "", "", nil
+	}
+	return "timescale/timescaledb-ha:" + tag, dockerImageName, nil
 }
 
 func writeToFiles(t *testing.T, upgradedDbInfo, pristineDbInfo dbSnapshot) error {
@@ -358,6 +349,9 @@ func withDBStartingAtOldVersionAndUpgrading(
 	prevDBImage, cleanImage, err := getDBImages(extensionState)
 	if err != nil {
 		t.Fatal("unable to get db image", err)
+	}
+	if prevDBImage == "" {
+		t.Skip("No corresponding previous DB image to test upgrade path against")
 	}
 	// Start a db with the prev extension and a prev connector as well
 	// Then run preUpgrade and shut everything down.
