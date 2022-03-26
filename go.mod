@@ -43,6 +43,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.12.0
 	github.com/thanos-io/thanos v0.25.1
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
+	github.com/walle/targz v0.0.0-20140417120357-57fe4206da5a // indirect
 	go.opentelemetry.io/collector/model v0.47.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.30.0
 	go.opentelemetry.io/otel v1.5.0
@@ -53,7 +54,8 @@ require (
 	go.uber.org/automaxprocs v1.4.0
 	go.uber.org/goleak v1.1.12
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
-	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8
+	golang.org/x/sys v0.0.0-20220317022123-2c4bbad7e934
+	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65
 	google.golang.org/genproto v0.0.0-20220217155828-d576998c0009 // indirect
 	google.golang.org/grpc v1.45.0
 	google.golang.org/protobuf v1.27.1
